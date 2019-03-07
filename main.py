@@ -107,7 +107,8 @@ class DataBase:
     def del_database(self):
         # deleting the db when db object is deleted.
         debug_print("%%$ deleting database instance\n")
-        os.remove(self.db_name)
+        if os.path.exists(self.db_name):
+            os.remove(self.db_name)
 
 
 class Block:
@@ -124,6 +125,9 @@ class Block:
         temp_string = str(timestamp) + str(data) + str(prev_hash)
         return sha512(temp_string.encode()).hexdigest()
 
+    def __repr__(self):
+        return str(self.data)
+
 
 class BlockChain:
     """
@@ -137,6 +141,9 @@ class BlockChain:
         # these are the internal variables that is not directly related to bc.
         self.db_name = "rbc" if db_name is None else db_name  # rbc: Rishabh Bhatnagar's block chain.
         self.db = DataBase(self.db_name)
+
+        # removing any existing database file if exists.
+        self.db.del_database()
         self.db.execute_query(
             'create table blockchain(file_name varchar(256), sender_name varchar(50), receiver_name varchar(50), timestamp varchar(100), file_size int, hash varchar)')
         # variables related to blockChain.
@@ -203,4 +210,4 @@ class BlockChain:
 
 bc = BlockChain()
 bc.add_block(sender_name="rishabh", receiver_name='bhatnagar', file_name='bhatnagarrishabh4@gmail.com', file_size='inf')
-debug_print(bc.genesis_block.next_block.data)
+debug_print(bc.genesis_block.next_block)
