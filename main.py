@@ -6,6 +6,7 @@ from hashlib import sha512
 
 debug_print = print
 
+
 class DataBase:
     """
     Description:
@@ -103,7 +104,7 @@ class DataBase:
         connection.execute(query)
         connection.close()
 
-    def __del__(self):
+    def del_database(self):
         # deleting the db when db object is deleted.
         debug_print("%%$ deleting database instance\n")
         os.remove(self.db_name)
@@ -199,9 +200,6 @@ class BlockChain:
             )
         )
 
-
-bc = BlockChain()
-del bc
 
 bc = BlockChain()
 bc.add_block(sender_name="rishabh", receiver_name='bhatnagar', file_name='bhatnagarrishabh4@gmail.com', file_size='inf')
