@@ -105,6 +105,13 @@ class DataBase:
         os.remove(self.db_name)
 
 
+class BLock:
+    def __init__(self, data, prev_hash, timestamp):
+        self.data = data
+        self.timestamp = timestamp
+        self.hash = self.get_hash(self.timestamp, self.)
+
+
 class BlockChain:
     """
     This is a minimalistic blockchain implementation that uses sqlite3 database to operate.
@@ -113,10 +120,6 @@ class BlockChain:
     to upload files frequently for demonstration of the project in Pragati competition.
     """
 
-    class BLock:
-        def __init__(self, data, prev_hash, nonce, prev_hash, timestamp):
-            pass
-    
 
     def __init__(self, db_name=None):
         self.genesis_block = None
