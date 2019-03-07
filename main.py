@@ -1,7 +1,10 @@
 import sqlite3
 import os
 import types
+from time import time as get_time_stamp
+from hashlib import sha512
 
+debug_print = print
 
 class DataBase:
     """
@@ -46,6 +49,7 @@ class DataBase:
     def execute_query(self, query):
         connection = self.get_db_connection()
         try:
+            debug_print("###", query)
             connection.execute(query)
         except sqlite3.OperationalError:
             raise Exception("Couldn't execute query. Your query is : \n{}".format(query))
@@ -81,7 +85,6 @@ class DataBase:
 
         elif type(values) == type({}):
             # user is not sure about the order of the cols in the db.
-
             if len(values) == 1:
                 # if only one element is present in the table, order doesn't matter due to reflexive property.
                 return self.add_to_table(table_name, [list(values.values())[0]])
@@ -89,9 +92,9 @@ class DataBase:
             query = "INSERT INTO {}{} VALUES {}".format(
                 table_name,
                 tuple(values.keys()),
-                tuple(values.keys())
+                tuple(values.values())
             )
-            print(query)
+            debug_print("@@@", query)
         else:
             raise NotImplementedError("Couldn't create row.")
 
@@ -102,14 +105,23 @@ class DataBase:
 
     def __del__(self):
         # deleting the db when db object is deleted.
+        debug_print("%%$ deleting database instance\n")
         os.remove(self.db_name)
 
 
-class BLock:
-    def __init__(self, data, prev_hash, timestamp):
+class Block:
+    def __init__(self, data, prev_hash, prev_block=None):
         self.data = data
-        self.timestamp = timestamp
-        self.hash = self.get_hash(self.timestamp, self.)
+        self.prev_block = prev_block
+        self.next_block = None
+
+        self.timestamp = get_time_stamp()
+        self.hash = self.create_hash(self.timestamp, data, prev_hash)
+
+    @staticmethod
+    def create_hash(timestamp, data, prev_hash):
+        temp_string = str(timestamp) + str(data) + str(prev_hash)
+        return sha512(temp_string.encode()).hexdigest()
 
 
 class BlockChain:
@@ -120,21 +132,77 @@ class BlockChain:
     to upload files frequently for demonstration of the project in Pragati competition.
     """
 
-
     def __init__(self, db_name=None):
-        self.genesis_block = None
+        # these are the internal variables that is not directly related to bc.
         self.db_name = "rbc" if db_name is None else db_name  # rbc: Rishabh Bhatnagar's block chain.
-        self.create_new_chain()
         self.db = DataBase(self.db_name)
+        self.db.execute_query(
+            'create table blockchain(file_name varchar(256), sender_name varchar(50), receiver_name varchar(50), timestamp varchar(100), file_size int, hash varchar)')
+        # variables related to blockChain.
+        self.genesis_block = None
+        self.current_block = None
+        self.create_new_chain()
 
     def create_new_chain(self, genesis_block_data=None):
+        """
+        This initialises the blockChain.
+        I know that, this function could have been merged with add_block function.
+        :param genesis_block_data: Initial data of the block.
+        :return: None. Sets the variables.
+        """
         if genesis_block_data is None:
-            genesis_block_data = "Rishabh Bhatnagar"
-    def add_block(self, data, timestamp, prev_hash):
-        self.data = data
+            genesis_block_data = dict(
+                sender_name='rishabh',
+                receiver_name='bhatnagar',
+                file_name='rishabh_bhatnagar',
+                file_size='0'
+            )
 
-    pass
+        # creating our first block of the bc.
+        self.genesis_block = Block(data=genesis_block_data, prev_hash="")
+
+        # initially, current and genesis point to same block.
+        self.current_block = self.genesis_block
+        self.store_block_to_db(self.current_block)
+
+    def add_block(self, file_name, sender_name, receiver_name, file_size):
+        """
+        This will add a block to the existing rbc.
+        :return: None.
+        """
+        # basic updation of linked list.
+        data = dict(
+            file_name=file_name,
+            sender_name=sender_name,
+            receiver_name=receiver_name,
+            file_size=file_size
+        )
+        # creating a new node.
+        new_block = Block(
+            data=data,
+            prev_hash=self.current_block.hash,
+            prev_block=self.current_block
+        )
+        self.current_block.next_block = new_block
+        self.current_block = new_block
+        self.store_block_to_db(self.current_block)
+
+    def store_block_to_db(self, block):
+        self.db.add_to_table(
+            'blockchain',
+            dict(
+                sender_name=block.data['sender_name'],
+                receiver_name=block.data['receiver_name'],
+                hash=block.hash,
+                timestamp=block.timestamp,
+                file_size=block.data['file_size']
+            )
+        )
 
 
 bc = BlockChain()
-bc.db.add_to_table("test", dict(a=12))
+del bc
+
+bc = BlockChain()
+bc.add_block(sender_name="rishabh", receiver_name='bhatnagar', file_name='bhatnagarrishabh4@gmail.com', file_size='inf')
+debug_print(bc.genesis_block.next_block.data)
