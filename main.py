@@ -3,8 +3,22 @@ import os
 import types
 from time import time as get_time_stamp
 from hashlib import sha512
+from flask import Flask
+from flask_restful import reqparse, Resource, Api
 
-debug_print = print
+if True:
+    debug_print = print
+    DB_NAME = "rbc"
+
+    ROOT = '192.168.31.32'
+    PORT = 5000
+
+    BASE_URL = 'http://' + ROOT + ':' + str(PORT)
+    URL_INSERT_BLOCKCHAIN = '/insert_blockchain'
+
+    _file_name, _file_size, _sender_name, _receiver_name = 'file_name', 'file_size', 'sender_name', 'receiver_name'
+    app = Flask(__name__)
+    api = Api(app)
 
 
 class DataBase:
@@ -54,6 +68,7 @@ class DataBase:
             connection.execute(query)
         except sqlite3.OperationalError:
             raise Exception("Couldn't execute query. Your query is : \n{}".format(query))
+        connection.close()
 
     def add_to_table(self, table_name, values):
         """
@@ -84,7 +99,7 @@ class DataBase:
             # terminating  the query after appending all the vals in the values with a semicolon.
             query += ');'
 
-        elif type(values) == type({}):
+        elif type({}) == type(values):
             # user is not sure about the order of the cols in the db.
             if len(values) == 1:
                 # if only one element is present in the table, order doesn't matter due to reflexive property.
@@ -109,6 +124,18 @@ class DataBase:
         debug_print("%%$ deleting database instance\n")
         if os.path.exists(self.db_name):
             os.remove(self.db_name)
+
+    def get_table(self, table_name):
+        connection = self.get_db_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute('select * from {} where 1==1'.format(table_name))
+        except sqlite3.OperationalError as e:
+            raise sqlite3.OperationalError(e)
+        for row in cursor.fetchall():
+            yield row
+
+        connection.close()
 
 
 class Block:
@@ -139,13 +166,22 @@ class BlockChain:
 
     def __init__(self, db_name=None):
         # these are the internal variables that is not directly related to bc.
-        self.db_name = "rbc" if db_name is None else db_name  # rbc: Rishabh Bhatnagar's block chain.
+        self.db_name = DB_NAME if db_name is None else db_name  # rbc: Rishabh Bhatnagar's block chain.
         self.db = DataBase(self.db_name)
 
         # removing any existing database file if exists.
-        self.db.del_database()
+        # self.db.del_database()
+
         self.db.execute_query(
-            'create table blockchain(file_name varchar(256), sender_name varchar(50), receiver_name varchar(50), timestamp varchar(100), file_size int, hash varchar)')
+            'create table if not exists blockchain('
+            'file_name varchar(256), '
+            'sender_name varchar(50), '
+            'receiver_name varchar(50), '
+            'timestamp varchar(100), '
+            'file_size int, '
+            'hash varchar'
+            ')'
+        )
         # variables related to blockChain.
         self.genesis_block = None
         self.current_block = None
@@ -208,6 +244,38 @@ class BlockChain:
         )
 
 
-bc = BlockChain()
-bc.add_block(sender_name="rishabh", receiver_name='bhatnagar', file_name='bhatnagarrishabh4@gmail.com', file_size='inf')
-debug_print(bc.genesis_block.next_block)
+class InsertBlockchain(Resource):
+    """
+    This inserts a new row to db and a new block in the database.
+    """
+
+    def post(self):
+        parser = reqparse.RequestParser()
+        # adding all the params to get from post request.
+        parameters = [_file_name, _file_size, _sender_name, _receiver_name]
+        for params in parameters:
+            parser.add_argument(params)
+
+        # getting the args from the post request.
+        args = parser.parse_args()
+
+        for param in parameters:
+            if args.get(param) is None:
+                # if any of the params is not found in the request, return 404 error.
+                return {param + "Found": 'false'}, 404
+
+        file_name = args[_file_name]
+        file_size = args[_file_size]
+        sender_name = args[_sender_name]
+        receiver_name = args[_receiver_name]
+
+
+if __name__ == '__main__':
+    # if someone is running this file directly then he/she wants to recreate a bc.
+    bc = BlockChain()
+else:
+    if not os.path.exists(DB_NAME):
+        bc = BlockChain()
+
+print(list(bc.db.get_table('blockchain')))
+api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
