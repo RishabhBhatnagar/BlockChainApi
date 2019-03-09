@@ -5,12 +5,14 @@ from time import time as get_time_stamp
 from hashlib import sha512
 from flask import Flask
 from flask_restful import reqparse, Resource, Api
+import pickle
 
 if True:
+    # defining all the constants which wil be used.
     debug_print = print
     DB_NAME = "rbc"
 
-    ROOT = '192.168.31.32'
+    ROOT = '192.168.6.170'
     PORT = 5000
 
     BASE_URL = 'http://' + ROOT + ':' + str(PORT)
@@ -117,6 +119,7 @@ class DataBase:
         # we got a query to execute.
         connection = self.get_db_connection()
         connection.execute(query)
+        connection.commit()
         connection.close()
 
     def del_database(self):
@@ -168,6 +171,8 @@ class BlockChain:
         # these are the internal variables that is not directly related to bc.
         self.db_name = DB_NAME if db_name is None else db_name  # rbc: Rishabh Bhatnagar's block chain.
         self.db = DataBase(self.db_name)
+        self.genesis_file_name = "genesis_block"
+        self.current_file_name = "current_block"
 
         # removing any existing database file if exists.
         # self.db.del_database()
@@ -183,9 +188,35 @@ class BlockChain:
             ')'
         )
         # variables related to blockChain.
-        self.genesis_block = None
-        self.current_block = None
-        self.create_new_chain()
+        if os.path.exists(self.genesis_file_name):
+            self.genesis_block = BlockChain.load_object(self.genesis_file_name)
+            self.current_block = BlockChain.load_object(self.current_file_name)
+            print("found currently existing files.")
+        else:
+            print('no currently existing files found. Creating new ones.')
+            self.genesis_block = None
+            self.current_block = None
+            self.create_new_chain()
+
+    def save_obj(self, obj, file_name):
+        if obj is not None:
+            with open(file_name, 'wb') as f:
+                pickle.dump(self.genesis_block, f)
+        else:
+            raise ValueError("I wont save a none type object.")
+
+    def save_genesis(self):
+        if self.genesis_block is not None:
+            with open(self.genesis_file_name, 'wb') as f:
+                pickle.dump(self.genesis_block, f)
+        else:
+            raise ValueError("Please create a new chain first.")
+
+    @staticmethod
+    def load_object(file_name):
+        with open(file_name, 'rb') as f:
+            obj = pickle.load(f)
+        return obj
 
     def create_new_chain(self, genesis_block_data=None):
         """
@@ -204,10 +235,12 @@ class BlockChain:
 
         # creating our first block of the bc.
         self.genesis_block = Block(data=genesis_block_data, prev_hash="")
+        self.save_genesis()
 
         # initially, current and genesis point to same block.
         self.current_block = self.genesis_block
         self.store_block_to_db(self.current_block)
+        self.save_obj(self.current_block, self.current_file_name)
 
     def add_block(self, file_name, sender_name, receiver_name, file_size):
         """
@@ -242,6 +275,7 @@ class BlockChain:
                 file_size=block.data['file_size']
             )
         )
+        self.save_obj(self.current_block, self.current_file_name)
 
 
 class InsertBlockchain(Resource):
@@ -270,12 +304,19 @@ class InsertBlockchain(Resource):
         receiver_name = args[_receiver_name]
 
 
-if __name__ == '__main__':
-    # if someone is running this file directly then he/she wants to recreate a bc.
-    bc = BlockChain()
-else:
-    if not os.path.exists(DB_NAME):
+if 0:
+    if __name__ == '__main__':
+        # if someone is running this file directly then he/she wants to recreate a bc.
         bc = BlockChain()
+    else:
+        if not os.path.exists(DB_NAME):
+            bc = BlockChain()
 
-print(list(bc.db.get_table('blockchain')))
-api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
+    api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
+    print(list(bc.db.get_table("blockchain")))
+    print(len(list(bc.db.get_table("blockchain"))))
+
+bc = BlockChain()
+a = list(bc.db.get_table('blockchain'))
+print(len(a))
+print(a)
