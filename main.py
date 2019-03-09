@@ -7,20 +7,19 @@ from flask import Flask
 from flask_restful import reqparse, Resource, Api
 import pickle
 
-if True:
-    # defining all the constants which wil be used.
-    debug_print = print
-    DB_NAME = "rbc"
+# defining all the constants which wil be used.
+debug_print = print
+DB_NAME = "rbc"
 
-    ROOT = '192.168.6.170'
-    PORT = 5000
+ROOT = '192.168.31.32'
+PORT = 5000
 
-    BASE_URL = 'http://' + ROOT + ':' + str(PORT)
-    URL_INSERT_BLOCKCHAIN = '/insert_blockchain'
+BASE_URL = 'http://' + ROOT + ':' + str(PORT)
+URL_INSERT_BLOCKCHAIN = '/insert_blockchain'
 
-    _file_name, _file_size, _sender_name, _receiver_name = 'file_name', 'file_size', 'sender_name', 'receiver_name'
-    app = Flask(__name__)
-    api = Api(app)
+_file_name, _file_size, _sender_name, _receiver_name = 'file_name', 'file_size', 'sender_name', 'receiver_name'
+app = Flask(__name__)
+api = Api(app)
 
 
 class DataBase:
@@ -268,6 +267,7 @@ class BlockChain:
         self.db.add_to_table(
             'blockchain',
             dict(
+                file_name=block.data['file_name'],
                 sender_name=block.data['sender_name'],
                 receiver_name=block.data['receiver_name'],
                 hash=block.hash,
@@ -302,21 +302,11 @@ class InsertBlockchain(Resource):
         file_size = args[_file_size]
         sender_name = args[_sender_name]
         receiver_name = args[_receiver_name]
+        bc.add_block(file_name, sender_name, receiver_name, file_size)
 
 
-if 0:
-    if __name__ == '__main__':
-        # if someone is running this file directly then he/she wants to recreate a bc.
-        bc = BlockChain()
-    else:
-        if not os.path.exists(DB_NAME):
-            bc = BlockChain()
+if __name__ == '__main__':
+    # if someone is running this file directly then he/she wants to recreate a bc.
+    bc = BlockChain()
 
-    api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
-    print(list(bc.db.get_table("blockchain")))
-    print(len(list(bc.db.get_table("blockchain"))))
-
-bc = BlockChain()
-a = list(bc.db.get_table('blockchain'))
-print(len(a))
-print(a)
+api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
