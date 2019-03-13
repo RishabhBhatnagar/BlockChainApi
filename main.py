@@ -1,4 +1,5 @@
 import sqlite3
+import json
 import os
 import types
 from time import time as get_time_stamp
@@ -11,7 +12,7 @@ import pickle
 debug_print = print
 DB_NAME = "rbc"
 
-ROOT = '192.168.31.32'
+ROOT = '127.0.0.3'
 PORT = 5000
 
 BASE_URL = 'http://' + ROOT + ':' + str(PORT)
@@ -284,29 +285,46 @@ class InsertBlockchain(Resource):
     """
 
     def post(self):
+        debug_print('post request received in blockchain insertion')
         parser = reqparse.RequestParser()
         # adding all the params to get from post request.
-        parameters = [_file_name, _file_size, _sender_name, _receiver_name]
+        parameters = (_file_name, _file_size, _sender_name, _receiver_name)
         for params in parameters:
             parser.add_argument(params)
 
         # getting the args from the post request.
         args = parser.parse_args()
 
+		# insert
+        print('Vars:', vars(args))
+		# insert
         for param in parameters:
             if args.get(param) is None:
+                print(param, "not found.")
                 # if any of the params is not found in the request, return 404 error.
+
                 return {param + "Found": 'false'}, 404
 
         file_name = args[_file_name]
         file_size = args[_file_size]
         sender_name = args[_sender_name]
         receiver_name = args[_receiver_name]
+        debug_print(file_name)
         bc.add_block(file_name, sender_name, receiver_name, file_size)
+        print(list(bc.db.get_table('blockchain')))
+        return json.dumps({"asdf":"asdf"}), 200
 
+
+@app.before_first_request
+def init_app():
+    global mySessionDict
+    mySessionDict = {} # clear sessions
+
+
+api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
 
 if __name__ == '__main__':
     # if someone is running this file directly then he/she wants to recreate a bc.
     bc = BlockChain()
+    app.run(host=ROOT, port=PORT, debug=True)
 
-api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
