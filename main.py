@@ -7,20 +7,25 @@ from hashlib import sha512
 from flask import Flask
 from flask_restful import reqparse, Resource, Api
 import pickle
+import pandas as pd
 
-# defining all the constants which wil be used.
-debug_print = print
-DB_NAME = "rbc"
+# defining  all the constants.
+if True:
+    # defining all the constants which wil be used.
+    debug_print = print
+    DB_NAME = "rbc"
 
-ROOT = '127.0.0.3'
-PORT = 5000
+    ROOT = '127.0.0.3'
+    PORT = 5000
 
-BASE_URL = 'http://' + ROOT + ':' + str(PORT)
-URL_INSERT_BLOCKCHAIN = '/insert_blockchain'
+    BASE_URL = 'http://' + ROOT + ':' + str(PORT)
+    URL_INSERT_BLOCKCHAIN = '/insert_blockchain'
+    URL_SEE_BLOCKCHAIN = '/see_blockchain'
 
-_file_name, _file_size, _sender_name, _receiver_name = 'file_name', 'file_size', 'sender_name', 'receiver_name'
-app = Flask(__name__)
-api = Api(app)
+    _file_name, _file_size, _sender_name, _receiver_name = 'file_name', 'file_size', 'sender_name', 'receiver_name'
+    app = Flask(__name__)
+    api = Api(app)
+    blockchain_table_name = 'blockchain'
 
 
 class DataBase:
@@ -65,12 +70,14 @@ class DataBase:
 
     def execute_query(self, query):
         connection = self.get_db_connection()
+        result = None
         try:
             debug_print("###", query)
-            connection.execute(query)
+            result = connection.execute(query)
         except sqlite3.OperationalError:
             raise Exception("Couldn't execute query. Your query is : \n{}".format(query))
         connection.close()
+        return result
 
     def add_to_table(self, table_name, values):
         """
@@ -124,12 +131,14 @@ class DataBase:
 
     def del_database(self):
         # deleting the db when db object is deleted.
-        debug_print("%%$ deleting database instance\n")
+        debug_print("%%$ deleting database instance\ n")
         if os.path.exists(self.db_name):
             os.remove(self.db_name)
 
     def get_table(self, table_name):
+        # This will return all the contents of the  table from the current db object instance
         connection = self.get_db_connection()
+        connection.row_factory = sqlite3.Row
         cursor = connection.cursor()
         try:
             cursor.execute('select * from {} where 1==1'.format(table_name))
@@ -145,15 +154,46 @@ class Block:
     def __init__(self, data, prev_hash, prev_block=None):
         self.data = data
         self.prev_block = prev_block
+        self.prev_hash = None
         self.next_block = None
+        self.nonce = None
+        self.temp_string = None
+
+        if self.prev_block is not None:
+            self.prev_block.next_block = self
 
         self.timestamp = get_time_stamp()
         self.hash = self.create_hash(self.timestamp, data, prev_hash)
 
-    @staticmethod
-    def create_hash(timestamp, data, prev_hash):
+    def mine(self, difficulty=1, max_iters=10**10):
+        self.nonce = 0
+        new_hash = self.hash_data(data=self.temp_string+str(self.nonce))
+        count = 0
+        while 1:
+            count += 1
+            if not (count % max_iters):
+                print(count, "iterations done.")
+                choice = input("Do you want to stop mining (y/n)?? ")
+                choice = "y" if not choice else choice[0].lower()
+                if choice == "y":
+                    print("stopped mining.")
+                    return None
+                else:
+                    print("continuing the mining process.")
+
+            if new_hash[:difficulty] == "0"*difficulty:
+                print(self.nonce)
+                return "Mining successful."
+            self.nonce += 1
+
+    def hash_data(self, data):
+        return sha512(data.encode()).hexdigest()
+
+    def create_hash(self, timestamp, data, prev_hash):
+        self.prev_hash = prev_hash
         temp_string = str(timestamp) + str(data) + str(prev_hash)
-        return sha512(temp_string.encode()).hexdigest()
+        self.temp_string = temp_string
+        return self.hash_data(temp_string)
 
     def __repr__(self):
         return str(self.data)
@@ -178,20 +218,21 @@ class BlockChain:
         # self.db.del_database()
 
         self.db.execute_query(
-            'create table if not exists blockchain('
+            'create table if not exists {}('
             'file_name varchar(256), '
             'sender_name varchar(50), '
             'receiver_name varchar(50), '
             'timestamp varchar(100), '
             'file_size int, '
             'hash varchar'
-            ')'
+            ')'.format(blockchain_table_name)
         )
         # variables related to blockChain.
         if os.path.exists(self.genesis_file_name):
             self.genesis_block = BlockChain.load_object(self.genesis_file_name)
             self.current_block = BlockChain.load_object(self.current_file_name)
             print("found currently existing files.")
+
         else:
             print('no currently existing files found. Creating new ones.')
             self.genesis_block = None
@@ -254,19 +295,21 @@ class BlockChain:
             receiver_name=receiver_name,
             file_size=file_size
         )
+
         # creating a new node.
         new_block = Block(
             data=data,
             prev_hash=self.current_block.hash,
             prev_block=self.current_block
         )
+
         self.current_block.next_block = new_block
         self.current_block = new_block
         self.store_block_to_db(self.current_block)
 
     def store_block_to_db(self, block):
         self.db.add_to_table(
-            'blockchain',
+            blockchain_table_name,
             dict(
                 file_name=block.data['file_name'],
                 sender_name=block.data['sender_name'],
@@ -277,6 +320,9 @@ class BlockChain:
             )
         )
         self.save_obj(self.current_block, self.current_file_name)
+
+    def to_string(self):
+        return str(list(self.db.get_table(blockchain_table_name)))
 
 
 class InsertBlockchain(Resource):
@@ -295,9 +341,9 @@ class InsertBlockchain(Resource):
         # getting the args from the post request.
         args = parser.parse_args()
 
-		# insert
+        # insert
         print('Vars:', vars(args))
-		# insert
+        # insert
         for param in parameters:
             if args.get(param) is None:
                 print(param, "not found.")
@@ -311,20 +357,34 @@ class InsertBlockchain(Resource):
         receiver_name = args[_receiver_name]
         debug_print(file_name)
         bc.add_block(file_name, sender_name, receiver_name, file_size)
-        print(list(bc.db.get_table('blockchain')))
-        return json.dumps({"asdf":"asdf"}), 200
+        print(list(bc.db.get_table(blockchain_table_name)))
+        return json.dumps({"asdf": "asdf"}), 200
+
+
+class SeeBlockchain(Resource):
+    "This will return either a string or a json representation of the blockchain."
+
+    def post(self):
+        # result is the list of dicts that will store the dict representation for the rows in the blockchain.
+
+        result = list(map(dict, bc.db.get_table(blockchain_table_name)))
+        result[0]["prev_hash"] = ""
+        for index, row in enumerate(result[1:]):
+            result[index]["prev_hash"] = result[index - 1]["hash"]
+        return result, 200
 
 
 @app.before_first_request
 def init_app():
     global mySessionDict
-    mySessionDict = {} # clear sessions
+    mySessionDict = {}  # clear sessions
 
 
 api.add_resource(InsertBlockchain, URL_INSERT_BLOCKCHAIN)
+api.add_resource(SeeBlockchain, URL_SEE_BLOCKCHAIN)
 
 if __name__ == '__main__':
     # if someone is running this file directly then he/she wants to recreate a bc.
     bc = BlockChain()
-    app.run(host=ROOT, port=PORT, debug=True)
-
+    bc.current_block.mine()
+    # app.run(host=ROOT, port=PORT, debug=True)
